@@ -72,7 +72,7 @@
 ### 1️⃣ 安装依赖
 
 ```bash
-pip install openpyxl
+pip install openpyxl>=3.0.10,<3.2
 ```
 
 （Tkinter 为 Python 内置，一般无需安装）

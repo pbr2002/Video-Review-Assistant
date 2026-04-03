@@ -30,7 +30,7 @@ from openpyxl import load_workbook
 from openpyxl.workbook.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-
+#这些是全局配置，规定默认工作表、Excel 关键列名、审核结果枚举值和不通过原因白名单。
 DEFAULT_SHEET_NAME = "Sheet1"
 
 COL_VIDEO_ID = "视频ID"
@@ -71,6 +71,7 @@ logger = logging.getLogger("review_excel_gui")
 
 
 @dataclass
+#这是“当前这一行审核数据”的打包对象，里面放了行号、视频 ID、链接、平台、当前审核结果和原因。
 class RowData:
     row_idx: int
     video_id: str
@@ -79,7 +80,7 @@ class RowData:
     current_review_result: str
     current_reason: str
 
-
+#配置日志输出，后面保存成功、跳过当前行、加载失败这些都会打印到控制台。
 def setup_logging() -> None:
     logger.setLevel(logging.INFO)
     logger.handlers = []
@@ -92,7 +93,7 @@ def setup_logging() -> None:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
-
+#把表头文本“清洗”一下：去空格、去换行、统一格式，方便做列名匹配。
 def normalize_text(value: Any) -> str:
     if value is None:
         return ""
@@ -103,13 +104,13 @@ def normalize_text(value: Any) -> str:
     text = re.sub(r"\s+", "", text)
     return text
 
-
+#安全地把单元格内容转成字符串；如果是空值，就返回空字符串。
 def safe_str(value: Any) -> str:
     if value is None:
         return ""
     return str(value).strip()
 
-
+#建立“别名词典”。比如“视频链接”“投稿链接”“作品链接”都映射成同一个标准字段。
 def build_header_alias_map() -> Dict[str, str]:
     aliases = {
         COL_VIDEO_ID: ["视频ID", "视频id"],
@@ -135,7 +136,7 @@ def build_header_alias_map() -> Dict[str, str]:
 
 HEADER_ALIAS_MAP = build_header_alias_map()
 
-
+#把某个表头值拿来判断，它属于哪个标准列。
 def match_header_name(raw_header: Any) -> Optional[str]:
     norm = normalize_text(raw_header)
     if not norm:
@@ -156,7 +157,7 @@ def match_header_name(raw_header: Any) -> Optional[str]:
         return COL_VIDEO_ID
     return None
 
-
+#从 Excel 单元格里提取链接。既支持普通超链接，也支持 =HYPERLINK(...) 公式。
 def extract_url_from_cell(cell: Any) -> str:
     if cell is None:
         return ""
@@ -181,7 +182,7 @@ def extract_url_from_cell(cell: Any) -> str:
 
     return text
 
-
+#判断一个字符串看起来像不像合法的 http/https 链接。
 def is_probably_url(url: str) -> bool:
     if not url:
         return False
@@ -191,7 +192,7 @@ def is_probably_url(url: str) -> bool:
     except Exception:
         return False
 
-
+#打开 Excel 文件和指定工作表；如果文件不存在、被占用、工作表不存在，就报错
 def load_workbook_and_sheet(excel_path: Path, sheet_name: str) -> Tuple[Workbook, Worksheet]:
     if not excel_path.exists():
         raise FileNotFoundError("Excel 文件不存在：{0}".format(excel_path))
@@ -210,7 +211,7 @@ def load_workbook_and_sheet(excel_path: Path, sheet_name: str) -> Tuple[Workbook
 
     return wb, wb[sheet_name]
 
-
+#按列映射把某一行的内容读出来，封装成 RowData。
 def locate_columns(ws: Worksheet, header_search_rows: int = 20) -> Tuple[int, Dict[str, int]]:
     required = {COL_VIDEO_URL, COL_REVIEW_RESULT, COL_REASON}
     best_row_idx = None  # type: Optional[int]
@@ -248,7 +249,7 @@ def locate_columns(ws: Worksheet, header_search_rows: int = 20) -> Tuple[int, Di
 
     return best_row_idx, best_map
 
-
+#把审核结果和原因写回 Excel 当前行。
 def get_row_data(ws: Worksheet, row_idx: int, column_map: Dict[str, int]) -> RowData:
     video_id = ""
     if COL_VIDEO_ID in column_map:
@@ -271,7 +272,7 @@ def get_row_data(ws: Worksheet, row_idx: int, column_map: Dict[str, int]) -> Row
         current_reason=current_reason,
     )
 
-
+#从开始位置往后找第一条“还没审核”的记录。
 def get_next_unreviewed_row(
     ws: Worksheet,
     header_row_idx: int,
@@ -292,7 +293,7 @@ def get_next_unreviewed_row(
 
     return None
 
-
+#从当前行往后找下一条要处理的记录。
 def get_next_row_after_current(
     ws: Worksheet,
     column_map: Dict[str, int],
@@ -311,7 +312,9 @@ def get_next_row_after_current(
 
     return None
 
-
+#检查审核结果和原因是否合法：
+#通过时，原因必须为空
+#不通过时，原因必须在白名单里
 def validate_review_result(review_result: str, reason: str) -> Tuple[str, str]:
     if review_result not in {REVIEW_PASS, REVIEW_FAIL}:
         raise ValueError("非法审核结果：{0}".format(review_result))
@@ -345,7 +348,7 @@ def write_result_to_row(
     else:
         ws.cell(row=row_idx, column=reason_col).value = reason
 
-
+#真正执行保存动作。如果 Excel/WPS 正占着文件，就提示保存失败。
 def save_workbook(wb: Workbook, excel_path: Path) -> None:
     try:
         wb.save(str(excel_path))
@@ -356,7 +359,7 @@ def save_workbook(wb: Workbook, excel_path: Path) -> None:
     except Exception as exc:
         raise RuntimeError("保存失败：{0}".format(exc)) from exc
 
-
+#尝试用默认浏览器打开视频链接；如果链接空了或格式不对，就返回失败信息。
 def maybe_open_url(video_url: str) -> Tuple[bool, str]:
     if not video_url:
         return False, "当前链接为空，不打开浏览器，请手动处理。"
@@ -372,8 +375,9 @@ def maybe_open_url(video_url: str) -> Tuple[bool, str]:
     except Exception as exc:
         return False, "自动打开浏览器失败：{0}".format(exc)
 
-
+#这是全程序最重要的类。你可以把它理解成“界面 + 主流程控制器”。它既保存当前状态，也响应按钮和下拉框事件。
 class ReviewApp:
+    #初始化窗口、各种状态变量，以及当前工作簿/当前行这些核心对象。
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("视频审核助手（GUI 预览版）")
@@ -454,7 +458,7 @@ class ReviewApp:
             font=font,
         )
         return lbl
-
+    #把整个界面搭出来：文件选择区、参数区、当前记录区、操作区、状态栏。
     def _build_ui(self) -> None:
         self.root.configure(bg=self.BG)
         self.root.columnconfigure(0, weight=1)
@@ -672,7 +676,7 @@ class ReviewApp:
             fg="#333333",
             anchor="w",
         ).grid(row=0, column=0, sticky="w")
-
+    #点“选择文件”后弹出文件选择框，并把选中的路径显示到界面上。
     def choose_file(self) -> None:
         file_path = filedialog.askopenfilename(
             title="选择 Excel 文件",
@@ -695,7 +699,7 @@ class ReviewApp:
             "已选择文件",
             "已选择：\n{0}\n\n请继续点击“加载并开始”。".format(file_path)
         )
-
+    #把用户填的“起始行”解析成数字，并校验是否合法。
     def parse_start_row(self) -> Optional[int]:
         text = self.start_row_var.get().strip()
         if not text:
@@ -706,7 +710,14 @@ class ReviewApp:
         if value <= 0:
             raise ValueError("起始行必须为空或正整数。")
         return value
-
+    '''这是“加载并开始”的总入口，负责：
+        检查文件有没有选
+        解析工作表和起始行
+        确认会覆盖原文件
+        打开 Excel
+        定位关键列
+        找第一条待审核记录
+        调用 load_row() 加载它。'''
     def start_review(self) -> None:
         try:
             path_text = self.file_path_var.get().strip()
@@ -756,7 +767,7 @@ class ReviewApp:
             logger.exception("加载失败：%s", exc)
             messagebox.showerror("错误", str(exc))
             self.status_var.set("加载失败：{0}".format(exc))
-
+    #把某一条记录真正显示到界面上，同时更新 banner、标题、进度；如果开启自动打开链接，还会自动打开浏览器。
     def load_row(self, row_idx: int) -> None:
         if self.worksheet is None or self.column_map is None:
             return
@@ -789,7 +800,7 @@ class ReviewApp:
 
         if self.auto_open_next_var.get():
             self.root.after(200, self.open_current_url)
-
+    #当没有记录可处理了，或者还没加载文件时，把界面恢复成空状态。
     def clear_current_display(self) -> None:
         self.current_row = None
         self.row_idx_var.set("-")
@@ -805,7 +816,7 @@ class ReviewApp:
         self._is_loading_reason = True
         self.reason_var.set("")
         self._is_loading_reason = False
-
+    #打开当前记录的视频链接；如果链接无效，会提示“建议判为哪种不通过原因”。
     def open_current_url(self) -> None:
         if self.current_row is None:
             messagebox.showinfo("提示", "当前没有可处理的记录。")
@@ -820,10 +831,10 @@ class ReviewApp:
                     "链接提示",
                     "{0}\n\n如需判为不通过，建议原因：\n{1}".format(msg, DEFAULT_INVALID_LINK_REASON),
                 )
-
+    #“打开当前视频”按钮的事件函数，本质就是调用 open_current_url()。
     def on_open_current(self) -> None:
         self.open_current_url()
-
+    #这是全程序最值钱的一个函数。它监听“不通过原因”的变化，只要用户选了一个合法原因，就自动触发保存和跳转。
     def on_reason_selected(self, *args) -> None:
         if self._is_loading_reason:
             return
@@ -846,7 +857,13 @@ class ReviewApp:
         )
         self.root.update_idletasks()
         self.save_current_result_and_go_next(REVIEW_FAIL, reason)
-
+    '''这是“保存并流转”的核心函数。它会：
+        检查当前是否已加载文件和当前行
+        校验审核结果
+        写回 Excel
+        保存文件
+        找下一条
+        加载下一条，或者提示全部完成。'''
     def save_current_result_and_go_next(self, review_result: str, reason: str) -> None:
         if self.workbook is None or self.worksheet is None or self.excel_path is None or self.column_map is None:
             messagebox.showwarning("提示", "请先加载 Excel 文件。")
@@ -896,10 +913,10 @@ class ReviewApp:
             logger.exception("保存失败：%s", exc)
             messagebox.showerror("错误", str(exc))
             self.status_var.set("保存失败：{0}".format(exc))
-
+    #点“审核通过”按钮时，调用统一保存函数，并传入“通过 + 空原因”。
     def on_pass(self) -> None:
         self.save_current_result_and_go_next(REVIEW_PASS, "")
-
+    #跳过当前行，不写结果，直接切到下一条。
     def on_skip(self) -> None:
         if self.worksheet is None or self.column_map is None or self.current_row is None:
             messagebox.showinfo("提示", "当前没有可处理的记录。")
@@ -922,7 +939,7 @@ class ReviewApp:
             return
 
         self.load_row(next_row)
-
+    #退出前先保存，再关闭窗口。
     def on_save_and_quit(self) -> None:
         try:
             if self.workbook is not None and self.excel_path is not None:
@@ -930,14 +947,14 @@ class ReviewApp:
             self.root.destroy()
         except Exception as exc:
             messagebox.showerror("错误", str(exc))
-
+    #用户点窗口右上角关闭时，先弹确认框，再决定是否退出。
     def on_close(self) -> None:
         confirm = messagebox.askyesno("退出确认", "确定退出吗？")
         if not confirm:
             return
         self.on_save_and_quit()
 
-
+#初始化日志，创建 Tkinter 根窗口，实例化 ReviewApp，最后启动 mainloop()。
 def main() -> int:
     setup_logging()
     root = tk.Tk()

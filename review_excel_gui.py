@@ -3,7 +3,7 @@
 
 """
 人工辅助视频审核 GUI 工具（纯 tk 兼容版）
-兼容：macOS / Python 3.9.6
+兼容：macOS / Python 3.11
 
 本版优化：
 1. 选择 Excel 文件后弹窗提示

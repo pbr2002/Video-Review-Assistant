@@ -1,3 +1,22 @@
+# Video Review Assistant
+
+A Python desktop application for Excel-based video review workflows, built with Tkinter and openpyxl. It helps reviewers open video links, record decisions and rejection reasons, save results back to the workbook, and resume from the next unreviewed item.
+
+## What I built
+
+- Designed a review interface that reads spreadsheet rows and opens the corresponding video links in a browser.
+- Streamlined the rejection path: choosing a reason records the decision, saves the workbook, and advances to the next item in one flow.
+- Added automatic save, detection of previously reviewed rows, and support for Excel hyperlink formulas to make long review sessions more reliable.
+
+**Tech:** Python, Tkinter, openpyxl.  
+**Context:** Developed during a Python automation internship for a real content-review workflow. This public repository demonstrates the application; it does not include company review data.
+
+## Run locally
+
+Install `openpyxl` (version 3.0.10 or later, below 3.2) and run `python3 review_excel_gui.py`. Use a copy of your workbook for testing: the application writes review results back to the selected Excel file. See the Chinese documentation below for the expected columns and full workflow.
+
+---
+
 # Video-Review-Assistant
 # 🎬 视频审核助手（Tkinter GUI）
 
